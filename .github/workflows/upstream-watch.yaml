@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Upstream Watch
+
+on:
+  schedule:
+    - cron: "27 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-openreel-video:
+    name: Check OpenReel Video upstream release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Open issue when upstream has a newer release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          UPSTREAM_REPO: Augani/openreel-video
+        run: |
+          set -euo pipefail
+
+          CURRENT_VERSION="$(sed -n 's/^ARG OPENREEL_VERSION=//p' Dockerfile | head -1)"
+          if [[ -z "$CURRENT_VERSION" ]]; then
+            CURRENT_VERSION="$(sed -n 's/^  OPENREEL_VERSION: //p' .github/workflows/build.yaml | head -1)"
+          fi
+          if [[ -z "$CURRENT_VERSION" ]]; then
+            echo "Could not find OpenReel Video version in Dockerfile or build workflow" >&2
+            exit 1
+          fi
+
+          if release_json="$(gh api "repos/${UPSTREAM_REPO}/releases/latest" 2>/dev/null)"; then
+            LATEST_VERSION="$(jq -r '.tag_name' <<< "$release_json")"
+            RELEASE_URL="$(jq -r '.html_url' <<< "$release_json")"
+            PUBLISHED_AT="$(jq -r '.published_at' <<< "$release_json")"
+            RELEASE_NAME="$(jq -r '.name // .tag_name' <<< "$release_json")"
+            RELEASE_NOTES="$(jq -r '.body // "No release notes provided."' <<< "$release_json" | head -c 12000)"
+            SOURCE_KIND="GitHub release"
+          else
+            LATEST_VERSION="$(gh api "repos/${UPSTREAM_REPO}/tags" --jq '.[0].name')"
+            RELEASE_URL="https://github.com/${UPSTREAM_REPO}/releases/tag/${LATEST_VERSION}"
+            PUBLISHED_AT="unknown"
+            RELEASE_NAME="${LATEST_VERSION}"
+            RELEASE_NOTES="No GitHub release object was available. Review the tag and upstream commits manually."
+            SOURCE_KIND="GitHub tag fallback"
+          fi
+
+          echo "Current OpenReel Video version: ${CURRENT_VERSION}"
+          echo "Latest OpenReel Video version: ${LATEST_VERSION}"
+
+          if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
+            echo "OpenReel Video is already up to date."
+            exit 0
+          fi
+
+          gh label create upstream-update --color 0E8A16 --description "Official upstream update available" || true
+          gh label create openreel-video --color 5319E7 --description "OpenReel Video image maintenance" || true
+
+          title="Update OpenReel Video from ${CURRENT_VERSION} to ${LATEST_VERSION}"
+          existing_issue="$(gh issue list \
+            --state open \
+            --search "repo:${GH_REPO} is:issue is:open in:title \"${title}\"" \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [[ -n "$existing_issue" ]]; then
+            echo "Issue #${existing_issue} already tracks ${LATEST_VERSION}."
+            exit 0
+          fi
+
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          An official OpenReel Video upstream version newer than the packaged HelmForge image was found.
+
+          ## Version
+
+          - Current packaged version: \`${CURRENT_VERSION}\`
+          - Latest upstream version: \`${LATEST_VERSION}\`
+          - Source signal: ${SOURCE_KIND}
+          - Release name: ${RELEASE_NAME}
+          - Published at: ${PUBLISHED_AT}
+
+          ## Official Sources
+
+          - Upstream repository: https://github.com/${UPSTREAM_REPO}
+          - Releases: https://github.com/${UPSTREAM_REPO}/releases
+          - Release notes or tag: ${RELEASE_URL}
+
+          ## Update Instructions
+
+          1. Update \`ARG OPENREEL_VERSION\` in \`Dockerfile\`.
+          2. Update \`OPENREEL_VERSION\` in \`.github/workflows/build.yaml\`.
+          3. Update README image tags and local build examples.
+          4. Build locally with:
+
+             \`\`\`bash
+             docker build --build-arg OPENREEL_VERSION=${LATEST_VERSION} -t helmforge/openreel-video:${LATEST_VERSION} .
+             docker run --rm -p 8080:8080 helmforge/openreel-video:${LATEST_VERSION}
+             curl -fsS http://127.0.0.1:8080/healthz
+             \`\`\`
+
+          5. Validate the SPA loads and the \`/healthz\` endpoint stays healthy.
+          6. Open a PR with the version bump, validation evidence, and any chart/site follow-up required by HelmForge.
+
+          ## Release Notes
+
+          ${RELEASE_NOTES}
+
+          EOF
+
+          gh issue create \
+            --title "$title" \
+            --label upstream-update \
+            --label openreel-video \
+            --body-file "$body_file"
