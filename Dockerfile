@@ -2,7 +2,7 @@
 
 FROM node:24-alpine AS source
 
-ARG OPENREEL_VERSION=v0.4.0
+ARG OPENREEL_VERSION=v0.5.0
 
 RUN apk add --no-cache git
 WORKDIR /src
