@@ -40,7 +40,7 @@ jobs:
             RELEASE_URL="$(jq -r '.html_url' <<< "$release_json")"
             PUBLISHED_AT="$(jq -r '.published_at' <<< "$release_json")"
             RELEASE_NAME="$(jq -r '.name // .tag_name' <<< "$release_json")"
-            RELEASE_NOTES="$(jq -r '.body // "No release notes provided."' <<< "$release_json" | head -c 12000)"
+            RELEASE_NOTES="$(jq -r '(.body // "No release notes provided.") | .[0:12000]' <<< "$release_json")"
             SOURCE_KIND="GitHub release"
           else
             LATEST_VERSION="$(gh api "repos/${UPSTREAM_REPO}/tags" --jq '.[0].name')"
