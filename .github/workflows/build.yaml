@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 env:
-  OPENREEL_VERSION: v0.5.0
+  OPENREEL_VERSION: v1.0.0-alpha.17
 
 jobs:
   build-push:

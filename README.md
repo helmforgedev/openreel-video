@@ -4,7 +4,7 @@ HelmForge container image for OpenReel Video, a browser-based video editor.
 
 ## Image
 
-- `docker.io/helmforge/openreel-video:v0.5.0`
+- `docker.io/helmforge/openreel-video:v1.0.0-alpha.17`
 
 The image builds the upstream `Augani/openreel-video` release and serves the
 Vite static output with an unprivileged NGINX runtime on port `8080`.
@@ -20,9 +20,9 @@ Vite static output with an unprivileged NGINX runtime on port `8080`.
 
 ```bash
 docker build \
-  --build-arg OPENREEL_VERSION=v0.5.0 \
-  -t helmforge/openreel-video:v0.5.0 .
-docker run --rm -p 8080:8080 helmforge/openreel-video:v0.5.0
+  --build-arg OPENREEL_VERSION=v1.0.0-alpha.17 \
+  -t helmforge/openreel-video:v1.0.0-alpha.17 .
+docker run --rm -p 8080:8080 helmforge/openreel-video:v1.0.0-alpha.17
 curl -fsS http://127.0.0.1:8080/healthz
 ```
 
